@@ -1,0 +1,11 @@
+{
+  "info": "A test scenario, ID:0",
+  "users": 3,
+  "services": 20,
+  "resources": {
+      "number": 10,
+      "capacities": [10,20,30,40]
+  },
+  "instances": 200
+
+}
