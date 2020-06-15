@@ -3,8 +3,8 @@
   "users": 3,
   "services": 20,
   "resources": {
-      "number": 10,
-      "capacities": [10,20,30,40]
+      "number": 2,
+      "capacities": [2,10]
   },
   "instances": 200
 

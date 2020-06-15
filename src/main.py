@@ -5,75 +5,45 @@ import simpy
 
 from entities.resource import Resource
 from entities.serviceDiscovery import ServiceDiscovery
+from entities.user import User
 
 random_seed = 1
-simulation_time = 100
+simulation_time = 1000
+monitoring_period = 10
 
-def user(name,env,serviceDiscovery):
-    time_between_request = 10
-    interrupt = False
-    myContainer = None
-    my_profile = None
-    number_request_containers = 0
-    max_tries = 3
-    tries = 0
-    time_between_SD=10
-    print("User_%i arrives at the Infrastructure at: %.2f."%(name,env.now))
-
-    # Wait to be attend by the Service Discovery Entity
+def execution_context(env,scenario):
     while True:
-        with serviceDiscovery.scale.request() as request:
-            yield request
-            # Wait to get a Container (new or already deployed)
-            yield env.process(serviceDiscovery.assign_resource(name))
-            # Get the ID-Container
-            myContainer = yield serviceDiscovery.get_resource()
-            if myContainer != None:
-                number_request_containers +=1
-                print("User_%i get at Service from container %i, at %.2f."%(name,myContainer.id,env.now))
-            else:
-                if tries > max_tries:
-                    break
-                else:
-                    tries+=1
-                    yield env.timeout(time_between_SD)
-
-        interrupt = False
-        tries = 0
-        while True:
-            yield env.timeout(time_between_request)
-            if interrupt:
-                with myContainer.SAC.request() as request:
-                    yield request
-                    profiles = myContainer.SAC.getprofiles()
-                    if my_profile in profiles:
-                        print("User_%i changes the SLA in the he container_%i: %.2f"%(name,myContainer.id,env.now))
-                        interrupt = False
-                    else:
-                        print("User_%i leaves the container_%i: %.2f. and looks for another one" %(name,myContainer.id,env.now))
-                        break
+        yield env.timeout(monitoring_period)
+        print("\t Execution context monitor wake up")
+        #For each resource, we test if the conditions have change (randomly)
+        for id_res in scenario["resources"]:
+            scenario["resources"][id_res].update_state()
+            print("\t\t%s"%scenario["resources"][id_res])
 
 
-    print("User_%i leaves the Infrastructure at: %.2f"%(name,env.now))
+def setup(env,conf,scenario):
+    scenario["containers"] = []
 
-
-
-def setup(env,conf):
-    resources = {}
     # Create and setup the resources
-    # for i in range(conf["resources"]["number"]):
-    #     idx = random.randint(0,len(conf["resources"]["capacities"]))
-    #     resources[i] = Resource(i,conf["resources"]["capacities"][idx],env,seed=i)
+    resources = {}
+    for i in range(conf["resources"]["number"]):
+        id_capacity_conf = random.randint(0,len(conf["resources"]["capacities"])-1)
+        resources[i] = Resource(i,conf["resources"]["capacities"][id_capacity_conf],env,seed=i)
+    scenario["resources"] = resources
 
     # Create Service Discovery process
-    serviceDiscovery = ServiceDiscovery(env,resources)
+    service_discovery = ServiceDiscovery(env,resources,scenario)
+    scenario["SD"] = service_discovery
 
-    # Crete Users
-    for i in range(conf["users"]):
-        env.process(user(i,env,serviceDiscovery))
+    # Population infrastructure
+    for id in range(conf["users"]):
+        u = User(id,env,service_discovery,scenario)
+        env.process(u.start())
 
+    env.process(execution_context(env,scenario))
+    # setup function must be a simpy.generator, not elegant but...
     while True:
-        yield env.timeout(30)
+        yield env.timeout(10000000)
 
 if __name__ == '__main__':
 
@@ -85,10 +55,17 @@ if __name__ == '__main__':
     conf = json.load(open(scenario0,"r"))
     print(conf['info'])
 
+
     random.seed(random_seed)
     for i in range(numberSimulations):
+        scenario = {}
         env = simpy.Environment()
-        env.process(setup(env,conf))
+        env.process(setup(env,conf,scenario))
         env.run(simulation_time)
+
+        for res in scenario["resources"].values():
+            print(res)
+
+
 
 print("Simulation Done!")
